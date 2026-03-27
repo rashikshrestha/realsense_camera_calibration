@@ -19,6 +19,7 @@ import os
 import numpy as np
 import cv2
 import tkinter as tk
+from tkinter import filedialog
 from PIL import Image, ImageTk
 
 try:
@@ -53,9 +54,32 @@ def main():
     root = tk.Tk()
     root.title('RealSense Cameras')
     
+    # Output directory state
+    output_dir = {'path': 'recordings'}
+    
     # add a control frame above the camera grid
     control_frame = tk.Frame(root)
-    control_frame.grid(row=0, column=0, columnspan=4, pady=4)
+    control_frame.grid(row=0, column=0, columnspan=4, pady=4, sticky='w')
+    
+    # Directory selection section (top-left)
+    dir_frame = tk.Frame(control_frame)
+    dir_frame.pack(side=tk.LEFT, padx=4)
+    dir_label = tk.Label(dir_frame, text='Output Dir:')
+    dir_label.pack(side=tk.LEFT, padx=2)
+    dir_display = tk.Label(dir_frame, text=output_dir['path'], fg='blue', relief=tk.SUNKEN, width=20)
+    dir_display.pack(side=tk.LEFT, padx=2)
+    
+    def choose_directory():
+        selected_dir = filedialog.askdirectory(title='Choose Output Directory')
+        if selected_dir:
+            output_dir['path'] = selected_dir
+            dir_display.config(text=output_dir['path'])
+            print(f"Output directory set to: {output_dir['path']}")
+    
+    dir_button = tk.Button(dir_frame, text='Browse...', command=choose_directory)
+    dir_button.pack(side=tk.LEFT, padx=2)
+    
+    # Recording controls
     record_button = tk.Button(control_frame, text='Start Recording')
     status_label = tk.Label(control_frame, text='Not recording')
     record_button.pack(side=tk.LEFT, padx=4)
@@ -75,7 +99,7 @@ def main():
         if recording['active']:
             return
         # prepare output directory
-        os.makedirs('recordings', exist_ok=True)
+        os.makedirs(output_dir['path'], exist_ok=True)
         # prepare VideoWriter for each camera that has recording enabled
         for cam in cams:
             key = cam['serial'] if cam['serial'] is not None else cam['name']
@@ -84,7 +108,7 @@ def main():
                 print(f"Skipping {key} (recording disabled)")
                 continue
             cam_id = recording['id_map'][key]
-            fname = os.path.join('recordings', f'cam_{cam_id}.mp4')
+            fname = os.path.join(output_dir['path'], f'cam_{cam_id}.mp4')
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             # writer will accept BGR frames; use capture resolution
             writer = cv2.VideoWriter(fname, fourcc, fps, (width, height))
@@ -92,7 +116,7 @@ def main():
                 recording['writers'][key] = {'writer': writer, 'path': fname}
                 print(f"Recording {key} -> {fname}")
         # open timestamps.csv and write header
-        csv_path = os.path.join('recordings', 'timestamps.csv')
+        csv_path = os.path.join(output_dir['path'], 'timestamps.csv')
         recording['csv_file'] = open(csv_path, 'w', buffering=1)
         recording['csv_file'].write('cam_id,frame_time\n')
 
