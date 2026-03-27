@@ -79,6 +79,13 @@ def main():
     dir_button = tk.Button(dir_frame, text='Browse...', command=choose_directory)
     dir_button.pack(side=tk.LEFT, padx=2)
     
+    # Timestamp CSV save option
+    save_timestamps_var = tk.BooleanVar(value=True)
+    timestamps_frame = tk.Frame(control_frame)
+    timestamps_frame.pack(side=tk.LEFT, padx=4)
+    timestamps_checkbox = tk.Checkbutton(timestamps_frame, text='Save timestamps.csv', variable=save_timestamps_var)
+    timestamps_checkbox.pack(side=tk.LEFT)
+    
     # Recording controls
     record_button = tk.Button(control_frame, text='Start Recording')
     status_label = tk.Label(control_frame, text='Not recording')
@@ -115,10 +122,15 @@ def main():
             if writer.isOpened():
                 recording['writers'][key] = {'writer': writer, 'path': fname}
                 print(f"Recording {key} -> {fname}")
-        # open timestamps.csv and write header
-        csv_path = os.path.join(output_dir['path'], 'timestamps.csv')
-        recording['csv_file'] = open(csv_path, 'w', buffering=1)
-        recording['csv_file'].write('cam_id,frame_time\n')
+        # open timestamps.csv and write header if enabled
+        recording['csv_file'] = None
+        if save_timestamps_var.get():
+            csv_path = os.path.join(output_dir['path'], 'timestamps.csv')
+            recording['csv_file'] = open(csv_path, 'w', buffering=1)
+            recording['csv_file'].write('cam_id,frame_time\n')
+            print(f"Saving timestamps to: {csv_path}")
+        else:
+            print("Timestamps CSV save is disabled")
 
         recording['active'] = True
         record_button.config(text='Stop Recording')
