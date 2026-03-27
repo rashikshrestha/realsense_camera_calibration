@@ -26,6 +26,8 @@ class CameraGridUI:
         self.widgets = {}
         # store max display sizes per camera key (width, height)
         self.max_sizes = {}
+        # track recording state per camera (key -> BooleanVar)
+        self.recording_enabled = {}
         self._build_ui()
 
     def _build_ui(self):
@@ -58,11 +60,18 @@ class CameraGridUI:
             frame.grid(row=r + self.start_row, column=c, padx=5, pady=5)
             title = tk.Label(frame, text=f"{cam['name']}\n{cam['serial']}")
             title.pack()
+            
+            # Add checkbox for recording enable/disable
+            key = cam['serial'] if cam['serial'] is not None else cam['name']
+            record_var = tk.BooleanVar(value=True)
+            self.recording_enabled[key] = record_var
+            checkbox = tk.Checkbutton(frame, text="Record", variable=record_var)
+            checkbox.pack()
+            
             lbl = tk.Label(frame)
             lbl.pack()
             info_lbl = tk.Label(frame, text="timestamp: -\nframe: -", font=(None, 8))
             info_lbl.pack()
-            key = cam['serial'] if cam['serial'] is not None else cam['name']
             self.widgets[key] = {'image': lbl, 'info': info_lbl}
             # reserve a max display size for this camera's image (subtract title/info space)
             # keep some padding inside the cell

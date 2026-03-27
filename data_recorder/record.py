@@ -76,9 +76,13 @@ def main():
             return
         # prepare output directory
         os.makedirs('recordings', exist_ok=True)
-        # prepare VideoWriter for each camera
+        # prepare VideoWriter for each camera that has recording enabled
         for cam in cams:
             key = cam['serial'] if cam['serial'] is not None else cam['name']
+            # Check if this camera's recording is enabled
+            if not ui.recording_enabled[key].get():
+                print(f"Skipping {key} (recording disabled)")
+                continue
             cam_id = recording['id_map'][key]
             fname = os.path.join('recordings', f'cam_{cam_id}.mp4')
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
