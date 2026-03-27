@@ -19,7 +19,7 @@ import os
 import numpy as np
 import cv2
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 
 try:
@@ -52,7 +52,7 @@ def main():
 
     # Build UI
     root = tk.Tk()
-    root.title('RealSense Cameras')
+    root.title('RealSense Recorder')
     
     # Output directory state
     output_dir = {'path': 'recordings'}
@@ -83,7 +83,7 @@ def main():
     save_timestamps_var = tk.BooleanVar(value=True)
     timestamps_frame = tk.Frame(control_frame)
     timestamps_frame.pack(side=tk.LEFT, padx=4)
-    timestamps_checkbox = tk.Checkbutton(timestamps_frame, text='Save timestamps.csv', variable=save_timestamps_var)
+    timestamps_checkbox = tk.Checkbutton(timestamps_frame, text='Save Timestamp', variable=save_timestamps_var)
     timestamps_checkbox.pack(side=tk.LEFT)
     
     # Recording controls
@@ -107,6 +107,37 @@ def main():
             return
         # prepare output directory
         os.makedirs(output_dir['path'], exist_ok=True)
+        
+        # Check if any output files already exist
+        existing_files = []
+        for cam in cams:
+            key = cam['serial'] if cam['serial'] is not None else cam['name']
+            # Check if this camera's recording is enabled
+            if not ui.recording_enabled[key].get():
+                continue
+            cam_id = recording['id_map'][key]
+            fname = os.path.join(output_dir['path'], f'cam_{cam_id}.mp4')
+            if os.path.exists(fname):
+                existing_files.append(fname)
+        
+        # Check if timestamps CSV will be created and already exists
+        if save_timestamps_var.get():
+            csv_path = os.path.join(output_dir['path'], 'timestamps.csv')
+            if os.path.exists(csv_path):
+                existing_files.append(csv_path)
+        
+        # If files exist, ask user for confirmation
+        if existing_files:
+            file_list = '\n'.join(existing_files)
+            response = messagebox.askyesno(
+                'Files Already Exist',
+                f'The following files already exist:\n\n{file_list}\n\nDo you want to overwrite them?'
+            )
+            if not response:
+                print("Recording cancelled by user")
+                return
+            print("Overwriting existing files")
+        
         # prepare VideoWriter for each camera that has recording enabled
         for cam in cams:
             key = cam['serial'] if cam['serial'] is not None else cam['name']
