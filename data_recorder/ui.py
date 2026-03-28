@@ -30,6 +30,8 @@ class CameraGridUI:
         self.recording_enabled = {}
         # store custom camera IDs (key -> StringVar)
         self.camera_ids = {}
+        # track camera keys for ID uniqueness
+        self.camera_keys = []
         self._build_ui()
 
     def _build_ui(self):
@@ -72,11 +74,15 @@ class CameraGridUI:
             key = cam['serial'] if cam['serial'] is not None else cam['name']
             cam_id_var = tk.StringVar(value=str(idx))
             self.camera_ids[key] = cam_id_var
+            self.camera_keys.append(key)
             
             id_label = tk.Label(header_frame, text="ID:", font=(None, 8))
             id_label.pack(side=tk.LEFT, padx=2)
             id_entry = tk.Entry(header_frame, textvariable=cam_id_var, width=3, font=(None, 8))
             id_entry.pack(side=tk.LEFT, padx=2)
+            
+            # Bind callback to ensure unique camera IDs
+            cam_id_var.trace('w', lambda name, index, mode, k=key: self._on_camera_id_change(k))
             
             # Add checkbox for recording enable/disable
             record_var = tk.BooleanVar(value=True)
@@ -126,3 +132,41 @@ class CameraGridUI:
     def get_camera_ids(self) -> Dict[str, str]:
         """Get the custom camera IDs mapping from key to ID."""
         return {key: var.get() for key, var in self.camera_ids.items()}
+
+    def _on_camera_id_change(self, changed_key: str):
+        """Handle camera ID change with uniqueness constraint.
+        
+        When a camera ID is changed, if that ID already exists on another camera,
+        swap the IDs between the two cameras.
+        """
+        new_id = self.camera_ids[changed_key].get()
+        
+        # Find if another camera already has this ID
+        duplicate_key = None
+        for key in self.camera_keys:
+            if key != changed_key and self.camera_ids[key].get() == new_id:
+                duplicate_key = key
+                break
+        
+        if duplicate_key:
+            # Swap IDs: give the old ID of changed_key to duplicate_key
+            old_id = None
+            # Find the old ID by checking what wasn't in use
+            all_ids = {self.camera_ids[k].get() for k in self.camera_keys}
+            used_ids = {self.camera_ids[k].get() for k in self.camera_keys if k != duplicate_key}
+            
+            # Get the ID that duplicate_key had before (we need to track this)
+            # Actually, we need to find what ID is missing from the set
+            # Get all possible IDs (0 to n-1)
+            expected_ids = set(str(i) for i in range(len(self.camera_keys)))
+            available_ids = expected_ids - used_ids
+            
+            if available_ids:
+                old_id = available_ids.pop()
+            else:
+                # Fallback: find the ID that duplicate_key currently has
+                old_id = self.camera_ids[duplicate_key].get()
+            
+            # Perform the swap
+            self.camera_ids[duplicate_key].set(old_id)
+            print(f"ID conflict resolved: {changed_key} -> {new_id}, {duplicate_key} -> {old_id}")
