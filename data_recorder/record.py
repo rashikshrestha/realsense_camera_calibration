@@ -21,6 +21,7 @@ import cv2
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
+import yaml
 
 try:
     import pyrealsense2 as rs
@@ -161,6 +162,24 @@ def main():
             print(f"Saving timestamps to: {csv_path}")
         else:
             print("Timestamps CSV save is disabled")
+
+        # Save camera mapping (camera index to serial number) as YAML
+        camera_mapping = {}
+        for cam in cams:
+            key = cam['serial'] if cam['serial'] is not None else cam['name']
+            # Only include cameras that are recording
+            if key in recording['writers']:
+                cam_id = recording['id_map'].get(key, '0')
+                camera_mapping[f'cam_{cam_id}'] = {
+                    'serial': cam['serial'],
+                    'name': cam['name']
+                }
+        
+        if camera_mapping:
+            yaml_path = os.path.join(output_dir['path'], 'camera_mapping.yaml')
+            with open(yaml_path, 'w') as f:
+                yaml.dump(camera_mapping, f, default_flow_style=False)
+            print(f"Saved camera mapping to: {yaml_path}")
 
         recording['active'] = True
         record_button.config(text='Stop Recording')
