@@ -97,14 +97,13 @@ def main():
     # Recording state
     recording = {'active': False, 'writers': {}, 'id_map': {}, 'csv_file': None}
 
-    # assign simple integer camera ids based on list order
-    for idx, cam in enumerate(cams):
-        key = cam['serial'] if cam['serial'] is not None else cam['name']
-        recording['id_map'][key] = idx
-
     def start_recording():
         if recording['active']:
             return
+        
+        # Get custom camera IDs from UI before recording starts
+        recording['id_map'] = ui.get_camera_ids()
+        
         # prepare output directory
         os.makedirs(output_dir['path'], exist_ok=True)
         
@@ -115,7 +114,7 @@ def main():
             # Check if this camera's recording is enabled
             if not ui.recording_enabled[key].get():
                 continue
-            cam_id = recording['id_map'][key]
+            cam_id = recording['id_map'].get(key, '0')
             fname = os.path.join(output_dir['path'], f'cam_{cam_id}.mp4')
             if os.path.exists(fname):
                 existing_files.append(fname)
@@ -145,7 +144,7 @@ def main():
             if not ui.recording_enabled[key].get():
                 print(f"Skipping {key} (recording disabled)")
                 continue
-            cam_id = recording['id_map'][key]
+            cam_id = recording['id_map'].get(key, '0')
             fname = os.path.join(output_dir['path'], f'cam_{cam_id}.mp4')
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             # writer will accept BGR frames; use capture resolution

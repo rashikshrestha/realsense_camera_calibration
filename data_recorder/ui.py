@@ -28,6 +28,8 @@ class CameraGridUI:
         self.max_sizes = {}
         # track recording state per camera (key -> BooleanVar)
         self.recording_enabled = {}
+        # store custom camera IDs (key -> StringVar)
+        self.camera_ids = {}
         self._build_ui()
 
     def _build_ui(self):
@@ -58,15 +60,29 @@ class CameraGridUI:
             frame = tk.Frame(self.root, bd=2, relief=tk.RIDGE)
             # apply start_row offset so callers can reserve space above the grid
             frame.grid(row=r + self.start_row, column=c, padx=5, pady=5)
-            title = tk.Label(frame, text=f"{cam['name']}\n{cam['serial']}")
-            title.pack()
+            
+            # Create header with title and camera ID input
+            header_frame = tk.Frame(frame)
+            header_frame.pack(fill=tk.X, padx=2, pady=2)
+            
+            title = tk.Label(header_frame, text=f"{cam['name']}\n{cam['serial']}", justify=tk.LEFT)
+            title.pack(side=tk.LEFT, padx=2)
+            
+            # Add camera ID input field
+            key = cam['serial'] if cam['serial'] is not None else cam['name']
+            cam_id_var = tk.StringVar(value=str(idx))
+            self.camera_ids[key] = cam_id_var
+            
+            id_label = tk.Label(header_frame, text="ID:", font=(None, 8))
+            id_label.pack(side=tk.LEFT, padx=2)
+            id_entry = tk.Entry(header_frame, textvariable=cam_id_var, width=3, font=(None, 8))
+            id_entry.pack(side=tk.LEFT, padx=2)
             
             # Add checkbox for recording enable/disable
-            key = cam['serial'] if cam['serial'] is not None else cam['name']
             record_var = tk.BooleanVar(value=True)
             self.recording_enabled[key] = record_var
-            checkbox = tk.Checkbutton(frame, text="Record", variable=record_var)
-            checkbox.pack()
+            checkbox = tk.Checkbutton(header_frame, text="Record", variable=record_var)
+            checkbox.pack(side=tk.LEFT, padx=2)
             
             lbl = tk.Label(frame)
             lbl.pack()
@@ -106,3 +122,7 @@ class CameraGridUI:
                 ts_text = f"timestamp: {ts:.3f} ms" if ts is not None else "timestamp: -"
                 fn_text = f"frame: {fn}" if fn is not None else "frame: -"
                 widget['info'].config(text=f"{ts_text}\n{fn_text}")
+
+    def get_camera_ids(self) -> Dict[str, str]:
+        """Get the custom camera IDs mapping from key to ID."""
+        return {key: var.get() for key, var in self.camera_ids.items()}
