@@ -1,7 +1,7 @@
 """
 get_intrinsics.py
 
-Extract camera intrinsics from connected RealSense cameras and save them to a YAML file.
+Extract camera intrinsics from connected RealSense cameras and save them to separate YAML files.
 """
 
 import pyrealsense2 as rs
@@ -9,6 +9,7 @@ import yaml
 from pathlib import Path
 from typing import Dict, List, Any
 import logging
+import argparse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -105,24 +106,27 @@ def get_camera_intrinsics() -> Dict[str, Any]:
     return intrinsics_data
 
 
-def save_intrinsics_to_yaml(intrinsics_data: Dict[str, Any], output_file: Path) -> None:
+def save_intrinsics_to_yaml(intrinsics_data: Dict[str, Any], target_directory: Path) -> None:
     """
-    Save camera intrinsics to a YAML file.
+    Save camera intrinsics to separate YAML files, one per camera.
     
     Args:
         intrinsics_data: Dictionary of intrinsics data from get_camera_intrinsics()
-        output_file: Path to the output YAML file
+        target_directory: Path to the directory where individual camera files will be saved
     """
-    output_file = Path(output_file)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
+    target_directory = Path(target_directory)
+    target_directory.mkdir(parents=True, exist_ok=True)
     
-    with open(output_file, 'w') as f:
-        yaml.dump(intrinsics_data, f, default_flow_style=False, sort_keys=False)
-    
-    logger.info(f"Intrinsics saved to {output_file}")
+    for serial, camera_data in intrinsics_data.items():
+        output_file = target_directory / f"{serial}.yaml"
+        
+        with open(output_file, 'w') as f:
+            yaml.dump(camera_data, f, default_flow_style=False, sort_keys=False)
+        
+        logger.info(f"Intrinsics for {camera_data['name']} (Serial: {serial}) saved to {output_file}")
 
 
-def main():
+def main(target_directory: str = None):
     """Main function to extract and save camera intrinsics."""
     # Get intrinsics from all connected cameras
     intrinsics_data = get_camera_intrinsics()
@@ -131,9 +135,14 @@ def main():
         logger.error("No intrinsics data collected. Please check your RealSense connections.")
         return
     
-    # Save to YAML file
-    output_file = Path(__file__).parent.parent / 'camera_intrinsics.yaml'
-    save_intrinsics_to_yaml(intrinsics_data, output_file)
+    # Use provided target directory or default to data folder
+    if target_directory is None:
+        target_directory = Path(__file__).parent.parent / 'data'
+    else:
+        target_directory = Path(target_directory)
+    
+    # Save to separate YAML files
+    save_intrinsics_to_yaml(intrinsics_data, target_directory)
     
     # Print summary
     logger.info("\n" + "="*60)
@@ -141,6 +150,7 @@ def main():
     logger.info("="*60)
     for serial, data in intrinsics_data.items():
         logger.info(f"\nCamera: {data['name']} (Serial: {serial})")
+        logger.info(f"File: {target_directory / f'{serial}.yaml'}")
         for stream_name, stream_data in data['streams'].items():
             logger.info(f"  {stream_name.upper()}:")
             logger.info(f"    Resolution: {stream_data['width']}x{stream_data['height']}")
@@ -151,4 +161,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Extract intrinsics from RealSense cameras")
+    parser.add_argument(
+        "-o", "--output",
+        type=str,
+        default=None,
+        help="Target directory to save intrinsics files. Defaults to 'data' folder in project root."
+    )
+    args = parser.parse_args()
+    
+    main(target_directory=args.output)
