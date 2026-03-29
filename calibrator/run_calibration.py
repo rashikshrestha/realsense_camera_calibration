@@ -1,5 +1,6 @@
 import argparse
 import numpy as np
+import yaml
 from pathlib import Path
 from caliscope.api import (
     Charuco, CharucoTracker, CameraArray,
@@ -11,11 +12,18 @@ from caliscope.reporting import (
 )
 from get_intrinsics import get_camera_intrinsics, save_intrinsics_to_yaml
 
+BLUE = '\033[94m'
+RESET = '\033[0m'
+
+def print_section(title):
+    """Print a colored section header"""
+    print(f"\n{BLUE}---------- {title} ----------{RESET}")
+
 
 def main(workspace_dir: str):
     workspace_dir = Path(workspace_dir)
    
-    # ----- Get Intrinsics -----
+    print_section("Get Intrinsics")
     intrinsics_dir = workspace_dir / "intrinsic_config"
     
     try:
@@ -26,7 +34,7 @@ def main(workspace_dir: str):
         return
     print("Saved intrinsics to YAML files in:", intrinsics_dir)
     
-    # ----- Calibration Target -----
+    print_section("Calibration Target")
     charuco = Charuco.from_squares(
         columns=4, rows=5, 
         square_size_cm=5.0, 
@@ -34,8 +42,7 @@ def main(workspace_dir: str):
     )
     tracker = CharucoTracker(charuco) 
     
-    # ----- Compute Extrinsics -----
-    # Get the video files with timestamps
+    print_section("Load Video Data")
     extrinsic_dir = workspace_dir / "extrinsic"
     
     extrinsic_videos = {}
@@ -45,16 +52,13 @@ def main(workspace_dir: str):
     
     timestamps_file = extrinsic_dir / "timestamps.csv"
     cameras = CameraArray.from_video_metadata(extrinsic_videos)
-    print(cameras) 
     
-    # Load camera mapping and intrinsics
-    import yaml
+    print_section("Load Camera Intrinsics")
     
     camera_mapping_file = workspace_dir / "camera_mapping.yaml"
     with open(camera_mapping_file, 'r') as f:
         camera_mapping = yaml.safe_load(f)
     
-    # Build cameras dict with intrinsics data
     for cam_key, cam_info in camera_mapping.items():
         cam_id = int(cam_key.split("_")[1])
         serial = cam_info['serial']
@@ -70,10 +74,12 @@ def main(workspace_dir: str):
                 [0, 0, 1]
             ])
         cameras[cam_id].distortions = np.array(color_stream['coefficients'])
+    print("Loaded camera mapping from:", camera_mapping_file)
+    print("Loaded intrinsics for:")
+    for cam_id, cam_info in camera_mapping.items():
+        print(f"  Camera ID: {cam_id}, Serial: {cam_info['serial']}, Name: {cam_info['name']}") 
 
-    print(cameras)
-    
-    # Extract Multicam Image Points
+    print_section("Extract Image Points")
     try:
         ext_points = extract_image_points_multicam(
             extrinsic_videos, 
@@ -84,16 +90,17 @@ def main(workspace_dir: str):
         print(f"Failed to extract extrinsic calibration points: {e}")
         return
     
-    # Bootstrap and Optimize
+    print_section("Bootstrap and Optimize")
     volume = CaptureVolume.bootstrap(ext_points, cameras)
     volume = volume.optimize(strict=False)
     
-    # Filter outliers and re-optimize
+    print_section("Filter Outliers")
     volume = volume.filter_by_percentile_error(2.5)
     volume = volume.optimize(strict=False)
     
-    # Save final caliscope results
+    print_section("Save Results")
     volume.save(workspace_dir / "extrinsic/capture_volume")
+    print("Calibration results saved to:", workspace_dir / "extrinsic/capture_volume")
 
 
 if __name__ == "__main__":
