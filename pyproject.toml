@@ -10,5 +10,6 @@ dependencies = [
     "pillow>=12.1.1",
     "pyrealsense2>=2.57.7.10387",
     "pyyaml>=6.0",
+    "toml>=0.10.2",
     "typing-extensions>=4.15.0",
 ]
