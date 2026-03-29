@@ -12,6 +12,7 @@ from caliscope.reporting import (
     print_intrinsic_report, print_extrinsic_report, print_camera_pair_coverage,
 )
 from get_intrinsics import get_camera_intrinsics, save_intrinsics_to_yaml
+from generate_final_extrinsics import build_extrinsics_from_toml, write_extrinsics_yaml
 
 BLUE = '\033[94m'
 RESET = '\033[0m'
@@ -124,7 +125,12 @@ def main(workspace_dir: str):
             distance = np.linalg.norm(trans_1 - trans_2)
             print(f"  Camera {cam_id_1} <-> Camera {cam_id_2}: {distance:.6f} m")
     
+    print_section("Generate Final Extrinsics")
     
+    extrinsics = build_extrinsics_from_toml(camera_array)
+    output_extrinsics_file = workspace_dir / "cam_config.yaml"
+    write_extrinsics_yaml(extrinsics, output_extrinsics_file)
+    print(f"Generated extrinsics file: {output_extrinsics_file}")
 
 
 if __name__ == "__main__":
