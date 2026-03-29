@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import yaml
+import toml
 from pathlib import Path
 from caliscope.api import (
     Charuco, CharucoTracker, CameraArray,
@@ -95,12 +96,35 @@ def main(workspace_dir: str):
     volume = volume.optimize(strict=False)
     
     print_section("Filter Outliers")
-    volume = volume.filter_by_percentile_error(2.5)
+    volume = volume.filter_by_percentile_error(10.0)
     volume = volume.optimize(strict=False)
     
     print_section("Save Results")
     volume.save(workspace_dir / "extrinsic/capture_volume")
     print("Calibration results saved to:", workspace_dir / "extrinsic/capture_volume")
+    
+    print_section("Calculate Camera Distances")
+    camera_array_file = workspace_dir / "extrinsic/capture_volume/camera_array.toml"
+    with open(camera_array_file, 'r') as f:
+        camera_array = toml.load(f)
+    
+    cameras_list = []
+    for cam_key, cam_data in camera_array['cameras'].items():
+        cam_id = int(cam_key)
+        translation = np.array(cam_data['translation'])
+        cameras_list.append((cam_id, translation))
+    
+    cameras_list.sort(key=lambda x: x[0])
+    
+    print(f"\nCamera Distances (Euclidean):")
+    for i in range(len(cameras_list)):
+        for j in range(i + 1, len(cameras_list)):
+            cam_id_1, trans_1 = cameras_list[i]
+            cam_id_2, trans_2 = cameras_list[j]
+            distance = np.linalg.norm(trans_1 - trans_2)
+            print(f"  Camera {cam_id_1} <-> Camera {cam_id_2}: {distance:.6f} m")
+    
+    
 
 
 if __name__ == "__main__":
