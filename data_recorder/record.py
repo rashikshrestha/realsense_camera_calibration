@@ -15,6 +15,7 @@ import signal
 import sys
 import time
 import os
+import argparse
 
 import numpy as np
 import cv2
@@ -41,7 +42,7 @@ def _sigint_handler(sig, frame):
 signal.signal(signal.SIGINT, _sigint_handler)
 
 
-def main():
+def main(workspace_dir):
     width, height, fps = 640, 480, 30
 
     # Create camera manager and start cameras
@@ -56,7 +57,7 @@ def main():
     root.title('RealSense Recorder')
     
     # Output directory state
-    output_dir = {'path': 'recordings'}
+    output_dir = {'path': os.path.join(workspace_dir, 'extrinsic')}
     
     # add a control frame above the camera grid
     control_frame = tk.Frame(root)
@@ -176,7 +177,7 @@ def main():
                 }
         
         if camera_mapping:
-            yaml_path = os.path.join(output_dir['path'], 'camera_mapping.yaml')
+            yaml_path = os.path.join(workspace_dir, 'camera_mapping.yaml')
             with open(yaml_path, 'w') as f:
                 yaml.dump(camera_mapping, f, default_flow_style=False)
             print(f"Saved camera mapping to: {yaml_path}")
@@ -266,4 +267,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-w', '--workspace', type=str, required=True, help='Workspace directory')
+    args = parser.parse_args()
+    main(workspace_dir=args.workspace)
