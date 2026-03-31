@@ -106,6 +106,8 @@ class CameraGridUI:
         for key, info in frames.items():
             img = info['image']  # RGB numpy array
             pil = Image.fromarray(img)
+            # flip the image horizontally to create mirror image for easy viewing
+            pil = pil.transpose(Image.FLIP_LEFT_RIGHT)
             # resize for display if larger than allocated cell while preserving aspect ratio
             max_size = self.max_sizes.get(key)
             max_size = (640, 480) #! inforce the max size to avoid thumbnail issues with some PIL versions, can be removed later
