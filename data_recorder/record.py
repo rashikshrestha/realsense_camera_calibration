@@ -43,7 +43,8 @@ signal.signal(signal.SIGINT, _sigint_handler)
 
 
 def main(workspace_dir):
-    width, height, fps = 640, 480, 30
+    # width, height, fps = 640, 480, 30
+    width, height, fps = 1280, 720, 30
 
     # Create camera manager and start cameras
     mgr = CameraManager(width=width, height=height, fps=fps)
