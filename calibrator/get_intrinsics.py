@@ -61,9 +61,9 @@ def get_camera_intrinsics() -> Dict[str, Any]:
             config.enable_device(serial)
         
         # Enable color and depth streams to get their intrinsics
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
-        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-        
+        config.enable_stream(rs.stream.color, 1280, 720, rs.format.rgb8, 30)
+        config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+
         try:
             profile = pipeline.start(config)
         except Exception as e:
