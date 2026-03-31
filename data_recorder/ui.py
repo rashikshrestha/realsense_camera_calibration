@@ -108,6 +108,7 @@ class CameraGridUI:
             pil = Image.fromarray(img)
             # resize for display if larger than allocated cell while preserving aspect ratio
             max_size = self.max_sizes.get(key)
+            max_size = (640, 480) #! inforce the max size to avoid thumbnail issues with some PIL versions, can be removed later
             if max_size is not None:
                 try:
                     pil.thumbnail(max_size, Image.LANCZOS)
