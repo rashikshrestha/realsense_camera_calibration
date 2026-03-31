@@ -131,12 +131,25 @@ def main(workspace_dir: str):
                 'distance_m': distance
             })
     
-    # Write distances to file
-    distances_file = workspace_dir / "camera_distances.yaml"
-    distances_data = {'distances': distance_info}
-    with open(distances_file, 'w') as f:
-        yaml.dump(distances_data, f, default_flow_style=False, sort_keys=False)
-    print(f"Saved camera distances to: {distances_file}")
+    # Create distance matrix
+    n_cameras = len(cameras_list)
+    distance_matrix = np.zeros((n_cameras, n_cameras))
+    
+    for i in range(n_cameras):
+        for j in range(n_cameras):
+            if i == j:
+                distance_matrix[i, j] = 0.0
+            elif i < j:
+                cam_id_1, trans_1 = cameras_list[i]
+                cam_id_2, trans_2 = cameras_list[j]
+                distance = np.linalg.norm(trans_1 - trans_2)
+                distance_matrix[i, j] = distance
+                distance_matrix[j, i] = distance
+    
+    # Save distance matrix to file
+    distances_file = workspace_dir / "camera_distance_matrix.txt"
+    np.savetxt(distances_file, distance_matrix, fmt='%.6f')
+    print(f"Saved camera distance matrix to: {distances_file}")
     
     print_section("Generate Final Extrinsics")
     
