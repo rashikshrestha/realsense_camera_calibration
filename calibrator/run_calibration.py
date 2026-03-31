@@ -38,9 +38,9 @@ def main(workspace_dir: str):
     
     print_section("Calibration Target")
     charuco = Charuco.from_squares(
-        columns=4, rows=5, 
-        square_size_cm=5.0, 
-        inverted=True
+        columns=4, rows=6, 
+        square_size_cm=6.505, 
+        inverted=False
     )
     tracker = CharucoTracker(charuco) 
     
@@ -118,16 +118,38 @@ def main(workspace_dir: str):
     cameras_list.sort(key=lambda x: x[0])
     
     print(f"\nCamera Distances (Euclidean):")
+    distance_info = []
     for i in range(len(cameras_list)):
         for j in range(i + 1, len(cameras_list)):
             cam_id_1, trans_1 = cameras_list[i]
             cam_id_2, trans_2 = cameras_list[j]
             distance = np.linalg.norm(trans_1 - trans_2)
             print(f"  Camera {cam_id_1} <-> Camera {cam_id_2}: {distance:.6f} m")
+            distance_info.append({
+                'camera_1': cam_id_1,
+                'camera_2': cam_id_2,
+                'distance_m': distance
+            })
+    
+    # Write distances to file
+    distances_file = workspace_dir / "camera_distances.yaml"
+    distances_data = {'distances': distance_info}
+    with open(distances_file, 'w') as f:
+        yaml.dump(distances_data, f, default_flow_style=False, sort_keys=False)
+    print(f"Saved camera distances to: {distances_file}")
     
     print_section("Generate Final Extrinsics")
     
     extrinsics = build_extrinsics_from_toml(camera_array)
+    
+    # Add serial numbers to extrinsics
+    for extrinsic in extrinsics:
+        cam_id = extrinsic.get("cam_id")
+        cam_key = f"cam_{cam_id}"
+        if cam_key in camera_mapping:
+            extrinsic["serial"] = camera_mapping[cam_key]["serial"]
+            extrinsic["name"] = camera_mapping[cam_key]["name"]
+    
     output_extrinsics_file = workspace_dir / "cam_config.yaml"
     write_extrinsics_yaml(extrinsics, output_extrinsics_file)
     print(f"Generated extrinsics file: {output_extrinsics_file}")

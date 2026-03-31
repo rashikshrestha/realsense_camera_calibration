@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 import sys
 import math
+import yaml
 from pathlib import Path
 from typing import List
 
@@ -129,18 +130,24 @@ def build_extrinsics_from_toml(toml_data):
 
 
 def write_extrinsics_yaml(extrinsics, out_path: Path):
-    # Create a simple YAML structure without external deps
-    lines = []
-    lines.append("# Generated multi-camera extrinsics\n")
-    lines.append("cams:")
+    # Build structured data for YAML
+    cams_data = []
     for ex in extrinsics:
-        cam_id = ex.get("cam_id")
-        lines.append(f"  - id: {int(cam_id) if cam_id is not None else 'null'}")
-        lines.append("    extrinsic:")
-        for row in ex["matrix"]:
-            lines.append(f"      - {format_float_list(row)}")
+        cam_entry = {
+            'id': int(ex.get("cam_id")) if ex.get("cam_id") is not None else None,
+        }
+        if "serial" in ex:
+            cam_entry['serial'] = ex['serial']
+        if "name" in ex:
+            cam_entry['name'] = ex['name']
+        cam_entry['extrinsic'] = ex["matrix"]
+        cams_data.append(cam_entry)
+    
+    output_data = {'cams': cams_data}
+    
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text("\n".join(lines) + "\n")
+    with open(out_path, 'w') as f:
+        yaml.dump(output_data, f, default_flow_style=False, sort_keys=False)
 
 
 def main(argv=None):
