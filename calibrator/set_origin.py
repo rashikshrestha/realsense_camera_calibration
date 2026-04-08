@@ -60,8 +60,13 @@ def capture_and_display_images(config_path: str, width: int = 640, height: int =
     print(f"Successfully started {len(started_cameras)} camera(s)")
     
     try:
-        # Capture frames from all cameras
-        print("\nCapturing images from all cameras...")
+        # Discard first 30 frames to allow cameras to warm up
+        print("\nWarming up cameras (discarding first 30 frames)...")
+        for i in range(30):
+            camera_mgr.get_frames(timeout_ms=500)
+        
+        # Capture frames from all cameras (31st frame)
+        print("Capturing images from all cameras (31st frame)...")
         frames = camera_mgr.get_frames(timeout_ms=2000)
         
         if len(frames) == 0:
