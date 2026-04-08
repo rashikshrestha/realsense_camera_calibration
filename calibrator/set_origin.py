@@ -213,33 +213,7 @@ def display_and_process_frames(frames: Dict, detector: ArucoDetector,
     return pose_data
 
 
-def print_pose_data(pose_data: Dict, camera_id: int) -> None:
-    """
-    Print pose information for a specific camera.
-    
-    Args:
-        pose_data: Dictionary mapping camera IDs to pose data
-        camera_id: Camera ID to print information for
-    """
-    cam_info = pose_data[camera_id]
-    
-    print(f"\n{'='*60}")
-    print(f"Camera ID: {camera_id}")
-    print(f"Serial: {cam_info['serial']}")
-    print(f"Camera Name: {cam_info['camera_name']}")
-    print(f"Number of ArUco markers detected: {cam_info['num_markers']}")
-    
-    if cam_info['num_markers'] > 0:
-        print(f"\nArUco Marker IDs detected: {cam_info['marker_ids']}")
-        print(f"\n--- ArUco[0] Pose Information ---")
-        print(f"Rotation Vector (rvec):\n{cam_info['rvecs'][0]}")
-        print(f"\nTranslation Vector (tvec):\n{cam_info['tvecs'][0]}")
-    else:
-        print("\nNo ArUco markers detected in this camera's frame")
-    print("="*60)
-
-
-def interactive_pose_query(pose_data: Dict) -> None:
+def interactive_pose_query(pose_data: Dict):
     """
     Allow user to interactively query pose data for different cameras.
     
@@ -252,24 +226,14 @@ def interactive_pose_query(pose_data: Dict) -> None:
         cam_info = pose_data[camera_id]
         print(f"  Camera ID: {camera_id} (Serial: {cam_info['serial']}) - Markers: {cam_info['num_markers']}")
     
-    while True:
-        try:
-            user_input = input("\nEnter Camera ID to view ArUco pose (or 'q' to quit): ").strip()
-            
-            if user_input.lower() == 'q':
-                print("Exiting...")
-                break
-            
-            camera_id = int(user_input)
-            
-            if camera_id not in pose_data:
-                print(f"Error: Camera ID {camera_id} not found. Available IDs: {sorted(pose_data.keys())}")
-                continue
-            
-            print_pose_data(pose_data, camera_id)
-            
-        except ValueError:
-            print("Error: Invalid input. Please enter a valid Camera ID or 'q' to quit.")
+    user_input = input("\nEnter Camera ID to view ArUco pose: ").strip()
+    camera_id = int(user_input)
+    
+    if camera_id not in pose_data:
+        print(f"Error: Camera ID {camera_id} not found. Available IDs: {sorted(pose_data.keys())}")
+        return None
+   
+    return pose_data[camera_id] 
 
 
 def capture_and_display_images(
@@ -345,8 +309,10 @@ def capture_and_display_images(
         
         # Interactive query
         if pose_data:
-            interactive_pose_query(pose_data)
-        
+            selected_pose_data = interactive_pose_query(pose_data)
+
+        print(selected_pose_data)
+
     finally:
         # Cleanup
         print("\nStopping all cameras...")
