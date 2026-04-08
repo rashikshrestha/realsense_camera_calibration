@@ -84,34 +84,192 @@ def load_intrinsics(intrinsics_dir: Path, serial: str, stream: str = 'color') ->
         return None
 
 
-def save_images(frames: Dict, output_dir: Path) -> None:
+def get_camera_id_from_serial(cameras_config: List[Dict], serial: str) -> Optional[int]:
     """
-    Save captured frames to disk.
+    Get camera ID from configuration by serial number.
     
     Args:
-        frames: Dictionary of captured frames from camera manager
-        output_dir: Path to directory where images will be saved
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
+        cameras_config: List of camera configurations
+        serial: Camera serial number
     
-    print(f"\nSaving images to: {output_dir}")
+    Returns:
+        Camera ID or None if not found
+    """
+    for cam_config in cameras_config:
+        if cam_config.get('serial') == serial:
+            return cam_config.get('id')
+    return None
+
+
+def process_single_frame(frame_data: Dict, detector: ArucoDetector, 
+                        intrinsics_dir: Path, cameras_config: List[Dict],
+                        output_dir: Path) -> Optional[Dict]:
+    """
+    Process a single camera frame: detect ArUco markers, estimate pose, and save.
+    
+    Args:
+        frame_data: Captured frame data from camera manager
+        detector: ArucoDetector instance
+        intrinsics_dir: Path to intrinsics directory
+        cameras_config: List of camera configurations
+        output_dir: Output directory for saving annotated images
+    
+    Returns:
+        Dictionary with pose data for this camera, or None if processing failed
+    """
+    camera_name = frame_data['name']
+    serial = frame_data['serial']
+    image = frame_data['image']
+    
+    # Convert RGB to BGR for OpenCV
+    image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    
+    # Detect ArUco markers
+    corners, ids = detector.detect(image_bgr)
+    marker_info = detector.get_marker_info(corners, ids)
+    
+    # Load intrinsics
+    intrinsics = load_intrinsics(intrinsics_dir, serial, stream='color')
+    if intrinsics is None:
+        print(f"    ✗ Failed to process camera {serial}: no intrinsics found")
+        return None
+    
+    camera_matrix = intrinsics['camera_matrix']
+    dist_coeffs = intrinsics['dist_coeffs']
+    
+    # Estimate pose
+    rvecs, tvecs = detector.estimate_pose(image_bgr, corners, camera_matrix, dist_coeffs)
+    
+    # Draw markers with pose
+    image_with_markers = detector.draw_markers_with_pose(
+        image_bgr, corners, ids, rvecs, tvecs, camera_matrix, dist_coeffs
+    )
+    
+    # Get camera ID
+    camera_id = get_camera_id_from_serial(cameras_config, serial)
+    
+    # Create filenames and titles
+    if camera_id is not None:
+        window_title = f"Camera ID: {camera_id} (Serial: {serial}) - ArUco: {marker_info['num_markers']} markers"
+        filename = f"{camera_id}_{serial}.png"
+    else:
+        window_title = f"{camera_name} (Serial: {serial}) - ArUco: {marker_info['num_markers']} markers"
+        filename = f"{serial}.png"
+    
+    # Save annotated image
+    output_dir.mkdir(parents=True, exist_ok=True)
+    filepath = output_dir / filename
+    success = cv2.imwrite(str(filepath), image_with_markers)
+    
+    if success:
+        print(f"    ✓ Saved: {filename}")
+    else:
+        print(f"    ✗ Failed to save: {filename}")
+    
+    # Display image
+    cv2.imshow(window_title, image_with_markers)
+    print(f"    ✓ Displayed: {window_title}")
+    
+    # Store and return pose data
+    if camera_id is not None:
+        return {
+            'camera_id': camera_id,
+            'serial': serial,
+            'camera_name': camera_name,
+            'rvecs': rvecs,
+            'tvecs': tvecs,
+            'marker_ids': marker_info['marker_ids'],
+            'num_markers': marker_info['num_markers']
+        }
+    
+    return None
+
+
+def display_and_process_frames(frames: Dict, detector: ArucoDetector,
+                               intrinsics_dir: Path, cameras_config: List[Dict],
+                               output_dir: Path) -> Dict:
+    """
+    Display and process all captured frames.
+    
+    Args:
+        frames: Dictionary of captured frames
+        detector: ArucoDetector instance
+        intrinsics_dir: Path to intrinsics directory
+        cameras_config: List of camera configurations
+        output_dir: Output directory for saving annotated images
+    
+    Returns:
+        Dictionary mapping camera IDs to their pose data
+    """
+    print("\nProcessing and displaying captured images...")
+    pose_data = {}
+    
     for cam_key, frame_data in frames.items():
-        serial = frame_data['serial']
-        image = frame_data['image']
-        
-        # Create filename with serial number or key
-        filename = f"camera_{serial or cam_key}.png"
-        filepath = output_dir / filename
-        
-        # Convert RGB to BGR for OpenCV (which expects BGR)
-        image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        
-        # Save the image
-        success = cv2.imwrite(str(filepath), image_bgr)
-        if success:
-            print(f"  ✓ Saved: {filename}")
-        else:
-            print(f"  ✗ Failed to save: {filename}")
+        result = process_single_frame(frame_data, detector, intrinsics_dir, 
+                                     cameras_config, output_dir)
+        if result is not None:
+            pose_data[result['camera_id']] = result
+    
+    return pose_data
+
+
+def print_pose_data(pose_data: Dict, camera_id: int) -> None:
+    """
+    Print pose information for a specific camera.
+    
+    Args:
+        pose_data: Dictionary mapping camera IDs to pose data
+        camera_id: Camera ID to print information for
+    """
+    cam_info = pose_data[camera_id]
+    
+    print(f"\n{'='*60}")
+    print(f"Camera ID: {camera_id}")
+    print(f"Serial: {cam_info['serial']}")
+    print(f"Camera Name: {cam_info['camera_name']}")
+    print(f"Number of ArUco markers detected: {cam_info['num_markers']}")
+    
+    if cam_info['num_markers'] > 0:
+        print(f"\nArUco Marker IDs detected: {cam_info['marker_ids']}")
+        print(f"\n--- ArUco[0] Pose Information ---")
+        print(f"Rotation Vector (rvec):\n{cam_info['rvecs'][0]}")
+        print(f"\nTranslation Vector (tvec):\n{cam_info['tvecs'][0]}")
+    else:
+        print("\nNo ArUco markers detected in this camera's frame")
+    print("="*60)
+
+
+def interactive_pose_query(pose_data: Dict) -> None:
+    """
+    Allow user to interactively query pose data for different cameras.
+    
+    Args:
+        pose_data: Dictionary mapping camera IDs to pose data
+    """
+    print("\n" + "="*60)
+    print("Available Camera IDs:")
+    for camera_id in sorted(pose_data.keys()):
+        cam_info = pose_data[camera_id]
+        print(f"  Camera ID: {camera_id} (Serial: {cam_info['serial']}) - Markers: {cam_info['num_markers']}")
+    
+    while True:
+        try:
+            user_input = input("\nEnter Camera ID to view ArUco pose (or 'q' to quit): ").strip()
+            
+            if user_input.lower() == 'q':
+                print("Exiting...")
+                break
+            
+            camera_id = int(user_input)
+            
+            if camera_id not in pose_data:
+                print(f"Error: Camera ID {camera_id} not found. Available IDs: {sorted(pose_data.keys())}")
+                continue
+            
+            print_pose_data(pose_data, camera_id)
+            
+        except ValueError:
+            print("Error: Invalid input. Please enter a valid Camera ID or 'q' to quit.")
 
 
 def capture_and_display_images(
@@ -121,8 +279,7 @@ def capture_and_display_images(
     fps: int = 30,
     aruco_dict_name: str = "DICT_6X6_250") -> None:
     """
-    Capture a single image from each camera in the configuration, detect ArUco markers,
-    save them, and display them to the user.
+    Main workflow: capture images, detect ArUco markers, and allow user interaction.
     
     Args:
         workspace_root: Root directory of the workspace
@@ -131,7 +288,7 @@ def capture_and_display_images(
         fps: Frames per second (default: 30)
         aruco_dict_name: ArUco dictionary to use (default: DICT_6X6_250)
     """
-    # Load camera configuration
+    # Setup
     config_path = workspace_root / "cam_config.yaml"
     print(f"Loading camera configuration from: {config_path}")
     config = load_camera_config(config_path)
@@ -147,7 +304,6 @@ def capture_and_display_images(
     print("Initializing camera manager...")
     camera_mgr = CameraManager(width=width, height=height, fps=fps)
     
-    # Discover and start cameras
     print("Discovering and starting cameras...")
     started_cameras = camera_mgr.discover_and_start()
     
@@ -157,7 +313,7 @@ def capture_and_display_images(
     
     print(f"Successfully started {len(started_cameras)} camera(s)")
     
-    # Create output directory for saving images
+    # Setup output directories
     output_dir = workspace_root / "set_origin_data"
     intrinsics_dir = workspace_root / "intrinsic_config"
     
@@ -166,12 +322,12 @@ def capture_and_display_images(
     detector = ArucoDetector(aruco_dict_name=aruco_dict_name)
     
     try:
-        # Discard first 30 frames to allow cameras to warm up
+        # Warm up cameras
         print("\nWarming up cameras (discarding first 30 frames)...")
         for i in range(30):
             camera_mgr.get_frames(timeout_ms=500)
         
-        # Capture frames from all cameras (31st frame)
+        # Capture frames
         print("Capturing images from all cameras (31st frame)...")
         frames = camera_mgr.get_frames(timeout_ms=2000)
         
@@ -179,121 +335,20 @@ def capture_and_display_images(
             print("Error: No frames captured from any camera")
             return
         
-        # Store pose data for later retrieval
-        pose_data = {}
+        # Process frames and display
+        pose_data = display_and_process_frames(frames, detector, intrinsics_dir, 
+                                              cameras_config, output_dir)
         
-        # Display images
-        print("\nDisplaying captured images...")
-        for cam_key, frame_data in frames.items():
-            camera_name = frame_data['name']
-            serial = frame_data['serial']
-            image = frame_data['image']
-            
-            # Convert RGB to BGR for OpenCV display
-            image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-            
-            # Detect ArUco markers
-            corners, ids = detector.detect(image_bgr)
-            
-            # Get marker info
-            marker_info = detector.get_marker_info(corners, ids)
-            
-            # Load camera intrinsics
-            intrinsics = load_intrinsics(intrinsics_dir, serial, stream='color')
-            camera_matrix = intrinsics['camera_matrix']
-            dist_coeffs = intrinsics['dist_coeffs']
-            
-            # Estimate pose and draw markers with axes
-            rvecs, tvecs = detector.estimate_pose(image_bgr, corners, camera_matrix, dist_coeffs)
-            image_with_markers = detector.draw_markers_with_pose(
-                image_bgr, corners, ids, rvecs, tvecs, camera_matrix, dist_coeffs
-            )
-            
-            # Get camera ID from configuration
-            camera_id = None
-            for cam_config in cameras_config:
-                if cam_config.get('serial') == serial:
-                    camera_id = cam_config.get('id')
-                    break
-            
-            # Create window title with camera ID and serial
-            if camera_id is not None:
-                window_title = f"Camera ID: {camera_id} (Serial: {serial}) - ArUco: {marker_info['num_markers']} markers"
-                annotated_filename = f"{camera_id}_{serial}.png"
-            else:
-                window_title = f"{camera_name} (Serial: {serial}) - ArUco: {marker_info['num_markers']} markers"
-                annotated_filename = f"{serial or cam_key}.png"
-            
-            # Display the image with markers and pose
-            cv2.imshow(window_title, image_with_markers)
-            print(f"    ✓ Displayed: {window_title}")
-            
-            # Save annotated image
-            annotated_filepath = output_dir / annotated_filename
-            success = cv2.imwrite(str(annotated_filepath), image_with_markers)
-            if success:
-                print(f"    ✓ Saved aruco image: {annotated_filename}")
-            else:
-                print(f"    ✗ Failed to save aruco image: {annotated_filename}")
-            
-            # Store pose data for this camera
-            if camera_id is not None:
-                pose_data[camera_id] = {
-                    'serial': serial,
-                    'camera_name': camera_name,
-                    'rvecs': rvecs,
-                    'tvecs': tvecs,
-                    'marker_ids': marker_info['marker_ids'],
-                    'num_markers': marker_info['num_markers']
-                }
-
-        print("\nPress any key to close the image windows and exit...")
+        print("\nPress any key to close the image windows...")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
         
-        # Ask user for camera ID
-        print("\n" + "="*60)
-        print("Available Camera IDs:")
-        for camera_id in sorted(pose_data.keys()):
-            cam_info = pose_data[camera_id]
-            print(f"  Camera ID: {camera_id} (Serial: {cam_info['serial']}) - Markers: {cam_info['num_markers']}")
-        
-        while True:
-            try:
-                user_input = input("\nEnter Camera ID to view ArUco pose (or 'q' to quit): ").strip()
-                
-                if user_input.lower() == 'q':
-                    print("Exiting...")
-                    break
-                
-                camera_id = int(user_input)
-                
-                if camera_id not in pose_data:
-                    print(f"Error: Camera ID {camera_id} not found. Available IDs: {sorted(pose_data.keys())}")
-                    continue
-                
-                cam_info = pose_data[camera_id]
-                
-                print(f"\n{'='*60}")
-                print(f"Camera ID: {camera_id}")
-                print(f"Serial: {cam_info['serial']}")
-                print(f"Camera Name: {cam_info['camera_name']}")
-                print(f"Number of ArUco markers detected: {cam_info['num_markers']}")
-                
-                if cam_info['num_markers'] > 0:
-                    print(f"\nArUco Marker IDs detected: {cam_info['marker_ids']}")
-                    print(f"\n--- ArUco[0] Pose Information ---")
-                    print(f"Rotation Vector (rvec):\n{cam_info['rvecs'][0]}")
-                    print(f"\nTranslation Vector (tvec):\n{cam_info['tvecs'][0]}")
-                else:
-                    print("\nNo ArUco markers detected in this camera's frame")
-                print("="*60)
-                
-            except ValueError:
-                print("Error: Invalid input. Please enter a valid Camera ID or 'q' to quit.")
+        # Interactive query
+        if pose_data:
+            interactive_pose_query(pose_data)
         
     finally:
-        # Stop all cameras
+        # Cleanup
         print("\nStopping all cameras...")
         camera_mgr.stop_all()
         print("Done!")
