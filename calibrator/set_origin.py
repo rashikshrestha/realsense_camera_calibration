@@ -179,6 +179,9 @@ def capture_and_display_images(
             print("Error: No frames captured from any camera")
             return
         
+        # Store pose data for later retrieval
+        pose_data = {}
+        
         # Display images
         print("\nDisplaying captured images...")
         for cam_key, frame_data in frames.items():
@@ -206,24 +209,88 @@ def capture_and_display_images(
                 image_bgr, corners, ids, rvecs, tvecs, camera_matrix, dist_coeffs
             )
             
-            # Create window title
-            window_title = f"{camera_name} (Serial: {serial}) - ArUco: {marker_info['num_markers']} markers"
+            # Get camera ID from configuration
+            camera_id = None
+            for cam_config in cameras_config:
+                if cam_config.get('serial') == serial:
+                    camera_id = cam_config.get('id')
+                    break
+            
+            # Create window title with camera ID and serial
+            if camera_id is not None:
+                window_title = f"Camera ID: {camera_id} (Serial: {serial}) - ArUco: {marker_info['num_markers']} markers"
+                annotated_filename = f"{camera_id}_{serial}.png"
+            else:
+                window_title = f"{camera_name} (Serial: {serial}) - ArUco: {marker_info['num_markers']} markers"
+                annotated_filename = f"{serial or cam_key}.png"
             
             # Display the image with markers and pose
             cv2.imshow(window_title, image_with_markers)
+            print(f"    ✓ Displayed: {window_title}")
             
             # Save annotated image
-            annotated_filename = f"{serial or cam_key}.png"
             annotated_filepath = output_dir / annotated_filename
             success = cv2.imwrite(str(annotated_filepath), image_with_markers)
             if success:
                 print(f"    ✓ Saved aruco image: {annotated_filename}")
             else:
                 print(f"    ✗ Failed to save aruco image: {annotated_filename}")
+            
+            # Store pose data for this camera
+            if camera_id is not None:
+                pose_data[camera_id] = {
+                    'serial': serial,
+                    'camera_name': camera_name,
+                    'rvecs': rvecs,
+                    'tvecs': tvecs,
+                    'marker_ids': marker_info['marker_ids'],
+                    'num_markers': marker_info['num_markers']
+                }
 
         print("\nPress any key to close the image windows and exit...")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+        
+        # Ask user for camera ID
+        print("\n" + "="*60)
+        print("Available Camera IDs:")
+        for camera_id in sorted(pose_data.keys()):
+            cam_info = pose_data[camera_id]
+            print(f"  Camera ID: {camera_id} (Serial: {cam_info['serial']}) - Markers: {cam_info['num_markers']}")
+        
+        while True:
+            try:
+                user_input = input("\nEnter Camera ID to view ArUco pose (or 'q' to quit): ").strip()
+                
+                if user_input.lower() == 'q':
+                    print("Exiting...")
+                    break
+                
+                camera_id = int(user_input)
+                
+                if camera_id not in pose_data:
+                    print(f"Error: Camera ID {camera_id} not found. Available IDs: {sorted(pose_data.keys())}")
+                    continue
+                
+                cam_info = pose_data[camera_id]
+                
+                print(f"\n{'='*60}")
+                print(f"Camera ID: {camera_id}")
+                print(f"Serial: {cam_info['serial']}")
+                print(f"Camera Name: {cam_info['camera_name']}")
+                print(f"Number of ArUco markers detected: {cam_info['num_markers']}")
+                
+                if cam_info['num_markers'] > 0:
+                    print(f"\nArUco Marker IDs detected: {cam_info['marker_ids']}")
+                    print(f"\n--- ArUco[0] Pose Information ---")
+                    print(f"Rotation Vector (rvec):\n{cam_info['rvecs'][0]}")
+                    print(f"\nTranslation Vector (tvec):\n{cam_info['tvecs'][0]}")
+                else:
+                    print("\nNo ArUco markers detected in this camera's frame")
+                print("="*60)
+                
+            except ValueError:
+                print("Error: Invalid input. Please enter a valid Camera ID or 'q' to quit.")
         
     finally:
         # Stop all cameras
