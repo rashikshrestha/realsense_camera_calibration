@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from data_recorder.camlib import CameraManager
 from calibrator.aruco_detector import ArucoDetector
+from calibrator.origin_solver import update_cam_config_with_new_origin
 
 
 def load_camera_config(config_path: str) -> Dict:
@@ -310,8 +311,12 @@ def capture_and_display_images(
         # Interactive query
         if pose_data:
             selected_pose_data = interactive_pose_query(pose_data)
-
-        print(selected_pose_data)
+        
+        if selected_pose_data is not None:
+            print(f"\nSelected pose data: {selected_pose_data}")
+            
+            # Rebase all camera extrinsics so that the detected ArUco is the new world origin
+            update_cam_config_with_new_origin(workspace_root, selected_pose_data)
 
     finally:
         # Cleanup
