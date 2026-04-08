@@ -9,6 +9,7 @@ import cv2
 import yaml
 import sys
 import argparse
+import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -24,6 +25,63 @@ def load_camera_config(config_path: str) -> Dict:
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     return config
+
+
+def load_intrinsics(intrinsics_dir: Path, serial: str, stream: str = 'color') -> Optional[Dict]:
+    """
+    Load camera intrinsic parameters from YAML file.
+    
+    Args:
+        intrinsics_dir: Path to directory containing intrinsic YAML files
+        serial: Camera serial number
+        stream: Stream type ('color' or 'depth')
+    
+    Returns:
+        Dictionary containing camera matrix and distortion coefficients, or None if not found
+    """
+    intrinsics_file = intrinsics_dir / f"{serial}.yaml"
+    
+    if not intrinsics_file.exists():
+        print(f"    Warning: Intrinsics file not found for serial {serial}")
+        return None
+    
+    try:
+        with open(intrinsics_file, 'r') as f:
+            intrinsics = yaml.safe_load(f)
+        
+        if 'streams' not in intrinsics or stream not in intrinsics['streams']:
+            print(f"    Warning: Stream '{stream}' not found in intrinsics")
+            return None
+        
+        stream_data = intrinsics['streams'][stream]
+        
+        # Extract camera matrix parameters
+        fx = stream_data.get('fx', 1.0)
+        fy = stream_data.get('fy', 1.0)
+        ppx = stream_data.get('ppx', 0.0)
+        ppy = stream_data.get('ppy', 0.0)
+        
+        # Create camera matrix
+        camera_matrix = np.array([
+            [fx, 0, ppx],
+            [0, fy, ppy],
+            [0, 0, 1]
+        ], dtype=np.float32)
+        
+        # Extract distortion coefficients
+        coefficients = stream_data.get('coefficients', [0, 0, 0, 0, 0])
+        dist_coeffs = np.array(coefficients[:5], dtype=np.float32).reshape(5, 1)
+        
+        return {
+            'camera_matrix': camera_matrix,
+            'dist_coeffs': dist_coeffs,
+            'width': stream_data.get('width', 640),
+            'height': stream_data.get('height', 480)
+        }
+    
+    except Exception as e:
+        print(f"    Warning: Error loading intrinsics for serial {serial}: {e}")
+        return None
 
 
 def save_images(frames: Dict, output_dir: Path) -> None:
@@ -101,6 +159,7 @@ def capture_and_display_images(
     
     # Create output directory for saving images
     output_dir = workspace_root / "set_origin_data"
+    intrinsics_dir = workspace_root / "intrinsic_config"
     
     # Initialize ArUco detector
     print(f"\nInitializing ArUco detector with dictionary: {aruco_dict_name}")
@@ -136,15 +195,22 @@ def capture_and_display_images(
             # Get marker info
             marker_info = detector.get_marker_info(corners, ids)
             
-            # Draw markers on image
-            image_with_markers = detector.draw_markers(image_bgr, corners, ids)
+            # Load camera intrinsics
+            intrinsics = load_intrinsics(intrinsics_dir, serial, stream='color')
+            camera_matrix = intrinsics['camera_matrix']
+            dist_coeffs = intrinsics['dist_coeffs']
+            
+            # Estimate pose and draw markers with axes
+            rvecs, tvecs = detector.estimate_pose(image_bgr, corners, camera_matrix, dist_coeffs)
+            image_with_markers = detector.draw_markers_with_pose(
+                image_bgr, corners, ids, rvecs, tvecs, camera_matrix, dist_coeffs
+            )
             
             # Create window title
             window_title = f"{camera_name} (Serial: {serial}) - ArUco: {marker_info['num_markers']} markers"
             
-            # Display the image with markers
+            # Display the image with markers and pose
             cv2.imshow(window_title, image_with_markers)
-            print(f"    ✓ Displayed: {window_title}")
             
             # Save annotated image
             annotated_filename = f"{serial or cam_key}.png"
