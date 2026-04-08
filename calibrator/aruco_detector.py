@@ -89,13 +89,14 @@ class ArucoDetector:
         tvecs = []
         
         for corner in corners:
-            # Define 3D points of the marker (in marker coordinate system)
-            # Marker is assumed to be centered at origin with size marker_length
+            # Define 3D points of the marker in marker coordinate system
+            # Marker is on the XY plane with Z pointing upward (out of the marker)
+            # Corners are in order: top-left, top-right, bottom-right, bottom-left
             marker_points = np.array([
-                [-marker_length/2, -marker_length/2, 0],
-                [marker_length/2, -marker_length/2, 0],
-                [marker_length/2, marker_length/2, 0],
-                [-marker_length/2, marker_length/2, 0]
+                [-marker_length/2, marker_length/2, 0],   # top-left
+                [marker_length/2, marker_length/2, 0],    # top-right
+                [marker_length/2, -marker_length/2, 0],   # bottom-right
+                [-marker_length/2, -marker_length/2, 0]   # bottom-left
             ], dtype=np.float32)
             
             # Solve PnP
@@ -103,7 +104,9 @@ class ArucoDetector:
                 marker_points,
                 corner.reshape(4, 2),
                 camera_matrix,
-                dist_coeffs
+                dist_coeffs,
+                useExtrinsicGuess=False,
+                flags=cv2.SOLVEPNP_ITERATIVE
             )
             
             if success:
@@ -171,12 +174,13 @@ class ArucoDetector:
         if len(rvecs) == 0 or len(tvecs) == 0:
             return result
         
-        # Define 3D axes points
+        # Define 3D axes points in marker coordinate system
+        # Origin at marker center, X/Y on marker plane, Z pointing up (out of marker)
         axis_points = np.float32([
-            [0, 0, 0],                    # Origin (red)
-            [axis_length, 0, 0],          # X axis (red)
-            [0, axis_length, 0],          # Y axis (green)
-            [0, 0, axis_length]           # Z axis (blue)
+            [0, 0, 0],                    # Origin
+            [axis_length, 0, 0],          # X axis end (red) - points right
+            [0, axis_length, 0],          # Y axis end (green) - points up (in marker plane)
+            [0, 0, axis_length]           # Z axis end (blue) - points perpendicular to marker (upward)
         ])
         
         # Draw axes for each marker
